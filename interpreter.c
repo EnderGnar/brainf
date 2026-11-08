@@ -99,11 +99,18 @@ void interpret(char *program, int decimal_mode) {
             }
             ip = jump_list[ip];
             break;
+        case '#':
+            // DEBUG
+            for(int i = 0; i < 40; i++)
+                printf("%3d,", band[i]);
+            printf("\n");
+        default:
+            // DEBUG
+            printf("|%c@%d: band[%d]: %d\n", program[ip], ip, pos, band[pos]);
         }
 
         ip += 1;
     }
-    printf("FINAL POSITION %d\n", pos);
 }
 
 int main(int argc, char **argv) {

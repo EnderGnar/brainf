@@ -1,7 +1,7 @@
 l main:in
 o getc input
 o putc input
-o set exit_code 71
+o set exit_code 113
 o sub delta input exit_code
 o iszero exit delta
 f br exit main:out main:in

@@ -1,0 +1,12 @@
+l main:in
+o getc i1
+o getc i2
+o add sum i1 i2
+o sub dif i1 i2
+o iszero izs sum
+o iszero izd dif
+o or any izs izd
+o putc sum
+o putc dif
+o putc any
+f return

@@ -247,7 +247,6 @@ fn compile_finalizer(fin: Finalizer, vars: &[String], current_position: &mut Str
     let pos_holder = RefCell::new(current_position);
 
     let get_index = |s: &str| -> isize {
-        dbg!(s, vars);
         let idx = INTRINSIC_VARS.iter().position(|v| *v==s).unwrap_or_else(
             || vars.iter().position(|v| v==s).unwrap() + INTRINSIC_VARS.len()
         );
@@ -363,7 +362,7 @@ fn bb_wrapper(stackframe_size: usize, initial_bb: usize) -> (String, String, Str
     let posterior = move_to_meta() + &move_to("$tmp_b") + "]" + &move_to("$root");
 
     let prog_prior = move_to("ret") + &"+".repeat(initial_bb) + "[" + &move_val("ret", "$isp") + &move_to("$root");
-    let prog_post  = move_to("ret") + "]";
+    let prog_post  = move_to("$isp") + zero + &move_to("ret") + "]";
 
     (prior, posterior, prog_prior, prog_post)
 }
