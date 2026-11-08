@@ -1,0 +1,34 @@
+l fib:in index
+o set one 1
+o iszero z index
+o sub im1 index one
+o iszero o im1
+o or is_le z o
+f br is_le fib:base fib:rec1
+
+l fib:base
+f return one
+
+l fib:rec1
+o set n1 -1
+o add min1 index n1
+f call fib:rec2 fib:in min1
+
+l fib:rec2
+o set res1 ret
+o set n2 -2
+o add min2 index n2
+f call fib:rec3 fib:in min2
+
+l fib:rec3
+o set res2 ret
+o add res res1 res2
+f return res
+
+l main:in
+o getc input
+f call main:end fib:in input
+
+l main:end
+o putc ret
+f return

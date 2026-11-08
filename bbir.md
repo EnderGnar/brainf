@@ -6,21 +6,24 @@ A BB is part of a group that shares a stack frame, like a function would.
 
 Example:
 ```bbir
-l fib:in 1 index
-o le is_le index 1
+l fib:in index
+o set one 1
+o le is_le index one
 f br is_le fib:base fib:rec1
 
 l fib:base
-f return 1
+f return one
 
 l fib:rec1
-o add min1 index -1
-f call fib:rec2 fib:in 1 min1
+o set n1 -1
+o add min1 index n1
+f call fib:rec2 fib:in min1
 
 l fib:rec2
 o set res1 ret
-o add min2 index -2
-f call fib:rec3 fib:in 1 min2
+o set n2 -2
+o add min2 index n2
+f call fib:rec3 fib:in min2
 
 l fib:rec3
 o set res2 ret
@@ -29,7 +32,7 @@ f return res
 
 l main:in
 o getc input
-f call main:out fib:in 1 input
+f call main:end fib:in input
 
 l main:end
 o putc ret

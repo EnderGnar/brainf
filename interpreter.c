@@ -103,7 +103,7 @@ void interpret(char *program, int decimal_mode) {
 
         ip += 1;
     }
-
+    printf("FINAL POSITION %d\n", pos);
 }
 
 int main(int argc, char **argv) {

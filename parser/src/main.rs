@@ -1,3 +1,9 @@
+use crate::bbir::{compile_program, parse_bbir_file};
+
+mod bbir;
+
 fn main() {
-    println!("Hello, world!");
+    let prog = parse_bbir_file("bbir_example/getput.bbir");
+    let bf = compile_program(prog);
+    println!("{bf}");
 }
