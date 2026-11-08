@@ -243,7 +243,7 @@ fn compile_op(op: Operation, vars: &[String], current_position: &mut String) -> 
     }
 }
 
-fn compile_finalizer(fin: Finalizer, vars: &[String], current_position: &mut String, stackframe_size: usize, bb_indices: &HashMap<Label, usize>) -> String {
+fn compile_finalizer(fin: Finalizer, vars: &[String], current_position: &mut String, stackframe_size: usize, bb_indices: &HashMap<Label, usize>, arg_map: &HashMap<Label, Vec<isize>>) -> String {
     let pos_holder = RefCell::new(current_position);
 
     let get_index = |s: &str| -> isize {
@@ -293,7 +293,22 @@ fn compile_finalizer(fin: Finalizer, vars: &[String], current_position: &mut Str
             + &move_to("ret") + &delta + &move_to_current() + &move_to("$tmp_a") + "]" + &move_to("$root")
         },
         Finalizer::Call { ret_label, call_label, args } => {
-            todo!()
+            let call_idx = bb_indices[&call_label];
+            let ret_idx  = bb_indices[&ret_label];
+
+            let active_args = &arg_map[&call_label];
+            let passive_args: Vec<isize> = args.iter().map(|s| get_index(s)).collect();
+
+            let arg_moves: Vec<String> = passive_args.iter().zip(active_args.iter()).map(|(from, to)| {
+                let delta = stackframe_size + (*to as usize) - (*from as usize);
+                let go = ">".repeat(delta);
+                let bk = "<".repeat(delta);
+                ">".repeat(*from as usize) + &go + zero + &bk + "[-" + &go + "+" + &bk + "]" + &"<".repeat(*from as usize)
+            }).collect();
+
+            move_to_meta() + &move_to("ret") + &"+".repeat(call_idx) + &move_to_current()
+            + &stack_front + &move_to("$isp") + zero + &"+".repeat(ret_idx) + &stack_back + &move_to("$root")
+            + "+" + &arg_moves.join("")
         },
         Finalizer::Return { ret_value } => {
             let start = move_to("$root");
@@ -311,13 +326,13 @@ fn compile_finalizer(fin: Finalizer, vars: &[String], current_position: &mut Str
 }
 
 // Compile bb assuming, current pointer is $root.
-fn compile_bb(bb: BasicBlock, variables: &HashMap<String, Vec<String>>, stackframe_size: usize, bb_indices: &HashMap<Label, usize>) -> String {
+fn compile_bb(bb: BasicBlock, variables: &HashMap<String, Vec<String>>, stackframe_size: usize, bb_indices: &HashMap<Label, usize>, arg_map: &HashMap<Label, Vec<isize>>) -> String {
     let mut current_position = "$root".to_string();
     let bf_ops: Vec<_> = bb.operations.into_iter().map(|op| {
         compile_op(op, &variables[&bb.label.family], &mut current_position)
     }).collect();
 
-    let bf_final = compile_finalizer(bb.finalizer, &variables[&bb.label.family], &mut current_position, stackframe_size, bb_indices);
+    let bf_final = compile_finalizer(bb.finalizer, &variables[&bb.label.family], &mut current_position, stackframe_size, bb_indices, arg_map);
 
     bf_ops.join("") + &bf_final
 }
@@ -392,7 +407,15 @@ pub fn compile_program(prog: Program) -> String {
     let entry = Label::try_from("main:in").unwrap();
     let (bb_prior, bb_post, prog_pre, prog_post) = bb_wrapper(stackframe_size, bb_indices[&entry]);
 
-    let bf_bbs: Vec<String> = prog.bbs.into_iter().map(|bb| bb_prior.to_string() + &compile_bb(bb, &variables, stackframe_size, &bb_indices) + &bb_post).collect();
+    let arg_map: HashMap<Label, Vec<isize>> = prog.bbs.iter().map(|bb| {
+        let get_index = |s: &String| -> isize {
+            let idx = variables[&bb.label.family].iter().position(|v| v==s).unwrap() + INTRINSIC_VARS.len();
+            idx as isize
+        };
+        (bb.label.clone(), bb.params.iter().map(get_index).collect())
+    }).collect();
+
+    let bf_bbs: Vec<String> = prog.bbs.into_iter().map(|bb| bb_prior.to_string() + &compile_bb(bb, &variables, stackframe_size, &bb_indices, &arg_map) + &bb_post).collect();
 
     prog_pre + &bf_bbs.join("") + &prog_post
 }

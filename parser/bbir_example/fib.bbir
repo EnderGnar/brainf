@@ -27,8 +27,13 @@ f return res
 
 l main:in
 o getc input
-f call main:end fib:in input
+f call main:two fib:in input
+
+l main:two
+o putc ret
+o getc select
+o iszero zz select
+f br zz main:end main:in
 
 l main:end
-o putc ret
 f return
