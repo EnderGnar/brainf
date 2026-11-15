@@ -1,6 +1,6 @@
 use std::{assert_matches, fs::read_to_string};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum LexOp {
     Assign,
     Eq,
@@ -37,6 +37,7 @@ enum LexNode {
     Op(LexOp),
     Brace(BraceTy, LexTree),
     Semicolon,
+    Comma,
 }
 
 #[derive(Debug, Default)]
@@ -77,6 +78,7 @@ struct Body {
 #[derive(Debug)]
 struct Function {
     name: String,
+    params: Vec<String>,
     body: Body
 }
 
@@ -104,6 +106,7 @@ fn consume(chars: &[char]) -> Vec<LexNode> {
             "!=" => Op(LexOp::Neq),
             "+" => Op(LexOp::Add),
             "-" => Op(LexOp::Sub),
+            "," => Comma,
             "char" => Type(str),
             "void" => Type(str),
             "while" => While,
@@ -138,12 +141,15 @@ fn consume(chars: &[char]) -> Vec<LexNode> {
 const BRACES: [char; 3] = ['(', '[', '{'];
 const ENDS:   [char; 3] = [')', ']', '}'];
 
+fn matching_chars(a: char, b: char) -> bool {
+    let varish = |c: char| 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9' || c == '_';
+    varish(a) == varish(b)
+}
+
 fn lex_c(chars: &[char]) -> (LexTree, usize) {
     let mut tree = LexTree::default();
     let mut current = Vec::new();
     let mut idx = 0;
-
-    println!("ENTER");
     
     while idx < chars.len() {
         if chars[idx] == '#' && current != vec!['\''] {
@@ -174,6 +180,11 @@ fn lex_c(chars: &[char]) -> (LexTree, usize) {
             idx += 1;
             break;
         } else {
+            if current.len() > 0 && !matching_chars(current[0], chars[idx]) {
+                let mut nodes = consume(&current);
+                tree.nodes.append(&mut nodes);
+                current.clear();
+            }
             current.push(chars[idx]);
             idx += 1;
         }
@@ -190,8 +201,164 @@ fn lex_c(chars: &[char]) -> (LexTree, usize) {
     (tree, idx)
 }
 
-fn parse_function(fn_ty: &String, name: &String, args: &LexTree, body: &LexTree) -> Function {
-    todo!();
+fn parse_params(lt: &LexTree) -> Vec<String> {
+    for (i, node) in lt.nodes.iter().enumerate() {
+        match i%3 {
+            0 => assert_matches!(node, LexNode::Type(_)),
+            1 => assert_matches!(node, LexNode::Var(_)),
+            2 => assert_matches!(node, LexNode::Comma),
+            _ => unreachable!()
+        }
+    }
+
+    let mut iterator = lt.nodes.iter().skip(1);
+    let mut params = Vec::new();
+    while let Some(LexNode::Var(var)) = iterator.next() {
+        params.push(var.clone());
+        iterator.next();
+        iterator.next();
+    }
+    params
+}
+
+// Expressions are super simplfied from C.
+// We assume at most 1 operator.
+fn parse_exp(nodes: &[LexNode]) -> Expression {
+    if let Some(op_pos) = nodes.iter().position(|n| matches!(n, LexNode::Op(_))) {
+        let a = parse_exp(&nodes[..op_pos]);
+        let b = parse_exp(&nodes[op_pos+1..]);
+        let LexNode::Op(op) = nodes[op_pos] else { unreachable!() };
+        Expression::Op { a: Box::new(a), b: Box::new(b), op }
+    }
+    else {
+        match (nodes.len(), &nodes[0]) {
+            (1, LexNode::Var(str)) => {
+                Expression::Var(str.clone())
+            },
+            (1, LexNode::Value(val)) => {
+                Expression::Val(*val)
+            },
+            (2, LexNode::Var(name)) => {
+                let LexNode::Brace(br_ty, inner) = &nodes[1] else { panic!("NO Expression {nodes:?}") };
+                match  br_ty {
+                    BraceTy::Brace => {
+                        Expression::Call { function: name.clone(), args: parse_args(inner) }
+                    },
+                    BraceTy::Bracket => {
+                        Expression::Access(name.clone(), Box::new(parse_exp(&inner.nodes)))
+                    },
+                    BraceTy::Curly => panic!("NO Expression {nodes:?}")
+                }
+            },
+            _ => panic!("NO Expression {nodes:?}")   
+        }
+    }
+}
+
+
+fn next_comma(nodes: &[LexNode]) -> Option<usize> {
+    nodes.iter().position(|n| matches!(n, LexNode::Comma))
+}
+
+fn parse_args(lt: &LexTree) -> Vec<Expression> {
+    let nodes = &lt.nodes;
+    let mut args = Vec::new();
+    let mut i = 0;
+
+    while i < nodes.len() {
+        if let Some(comma) = next_comma(&nodes[i..]) {
+            args.push(parse_exp(&nodes[i..i+comma]));
+            i += comma + 1;
+        } else {
+            args.push(parse_exp(&nodes[i..]));
+            i = nodes.len()
+        }
+    }
+
+    args
+}
+
+fn next_semicolon(nodes: &[LexNode]) -> usize {
+    nodes.iter().position(|n| matches!(n, LexNode::Semicolon)).unwrap()
+}
+
+fn parse_stmts(lt: &LexTree) -> Body {
+    let nodes = &lt.nodes;
+    let mut stmts = Vec::new();
+    let mut i = 0;
+
+    while i < nodes.len()  {
+        dbg!(i);
+        match &nodes[i] {
+            LexNode::While => {
+                let LexNode::Brace(BraceTy::Brace, con) = &nodes[i+1] else { panic!("No condition") };
+                let LexNode::Brace(BraceTy::Curly, bod) = &nodes[i+2] else { panic!("No body") };
+                stmts.push(Stmt::While { condition: parse_exp(&con.nodes), body: parse_stmts(bod) });
+                i += 3;
+            },
+            LexNode::If => {
+                let LexNode::Brace(BraceTy::Brace, con) = &nodes[i+1] else { panic!("No condition") };
+                let LexNode::Brace(BraceTy::Curly, bod) = &nodes[i+2] else { panic!("No body") };
+                stmts.push(Stmt::If { condition: parse_exp(&con.nodes), body: parse_stmts(bod) });
+                i += 3;
+            },
+            LexNode::Var(str) => {
+                if i+1 >= nodes.len() {panic!("Where is the rest? {str}")}
+                match &nodes[i+1] {
+                    LexNode::Op(LexOp::Assign) => {
+                        let semi_idx = i + next_semicolon(&nodes[i..]);
+                        stmts.push(Stmt::Assign { l: parse_exp(&nodes[i..i+1]), r: parse_exp(&nodes[i+2..semi_idx]) });
+                        i = semi_idx + 1;
+                    }
+                    LexNode::Brace(BraceTy::Brace, _) => {
+                        assert_matches!(&nodes[i+2], LexNode::Semicolon);
+                        stmts.push(
+                            Stmt::Call { call: parse_exp(&nodes[i..i+2]) }
+                        );
+                        i += 3;
+                    }
+                    LexNode::Brace(BraceTy::Bracket, _index) => {
+                        assert_matches!(&nodes[i+2], LexNode::Op(LexOp::Assign));
+                        let semi_idx = i + next_semicolon(&nodes[i..]);
+
+                        stmts.push(Stmt::Assign { l: parse_exp(&nodes[i..i+2]), r: parse_exp(&nodes[i+3..semi_idx]) });
+                        i = semi_idx + 1;
+                    }
+                    x => {
+                        let slice = &nodes[i..];
+                        panic!("UNKNOWN STMT {x:?} {slice:?}")
+                    }
+                }
+            },
+            LexNode::Return => {
+                let semi_idx = i + next_semicolon(&nodes[i..]);
+                if semi_idx == i + 1 {
+                    stmts.push(Stmt::Return(None));
+                } else {
+                    stmts.push(Stmt::Return(Some(parse_exp(&nodes[i+1..semi_idx]))));
+                }
+                i = semi_idx + 1;
+            }
+            // HACKY: Should only allow an assign next.
+            LexNode::Type(_) => {
+                i += 1;
+            }
+            x => panic!("UNKNOW STMT START {x:?}")
+        }
+    }
+
+
+    Body {
+        stmts,
+    }
+}
+
+fn parse_function(name: &String, params: &LexTree, body: &LexTree) -> Function {
+    Function {
+        name: name.clone(),
+        params: parse_params(params),
+        body: parse_stmts(body),
+    }
 }
 
 
@@ -206,15 +373,20 @@ fn parse(lt: LexTree) -> AST {
         match ty {
             BraceTy::Brace => {
                 // Function
-                let LexNode::Type(fn_ty) = &nodes[i] else { panic!("INVALID CONSUME") };
+                assert_matches!(&nodes[i], LexNode::Type(_));
                 let LexNode::Var(name) = &nodes[i+1] else { panic!("INVALID CONSUME") };
-                let LexNode::Brace(bty, body) = &nodes[i+3] else { panic!("INVALID CONSUME") };
-                funcs.push(parse_function(fn_ty, name, inner, body));
-                assert_matches!(bty, BraceTy::Curly);
+                let LexNode::Brace(BraceTy::Curly, body) = &nodes[i+3] else { panic!("INVALID CONSUME") };
+                funcs.push(parse_function(name, inner, body));
+                i += 4;
             },
             BraceTy::Bracket => {
                 // Array
-                
+                let LexNode::Var(name) = &nodes[i+1] else { panic!("INVALID CONSUME") };
+                assert_matches!(&nodes[i+3], LexNode::Semicolon);
+                assert_eq!(inner.nodes.len(), 1);
+                let LexNode::Value(len) = &inner.nodes[0] else { panic!("INVALID LENGTH") };
+                arrays.push( Array { name: name.to_string(), len: (*len as u32) });  
+                i += 4;              
             },
             BraceTy::Curly => panic!("INVALID CONSUME"),
         }
@@ -232,6 +404,5 @@ pub fn parse_c_file(filename: &str) -> AST {
     let str = read_to_string(filename).unwrap();
     let chars: Vec<_> = str.chars().collect();
     let (lextree, _) = lex_c(&chars);
-    dbg!(&lextree);
     parse(lextree)
 }

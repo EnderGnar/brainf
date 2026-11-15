@@ -35,7 +35,7 @@ char move_back(char ip) {
 void run_prog(char len) {
     char ip = 0;
     char pos = 0;
-    char v;
+    char v = 0;
 
     while (ip != len) {
         char c = prog[ip];
