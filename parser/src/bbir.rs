@@ -20,7 +20,7 @@ impl TryFrom<&str> for Label {
 }
 
 #[derive(Debug)]
-enum OpTy {
+pub(crate) enum OpTy {
     Getc, Putc, Set, Add, Sub, IsZero, Or
 }
 
@@ -42,13 +42,13 @@ impl TryFrom<&str> for OpTy {
 }
 
 #[derive(Debug)]
-struct Operation {
-    op_type: OpTy,
-    args: Vec<String>
+pub(crate) struct Operation {
+    pub(crate) op_type: OpTy,
+    pub(crate) args: Vec<String>
 }
 
 #[derive(Debug)]
-enum Finalizer {
+pub(crate) enum Finalizer {
     Branch {
         condition: String,
         positive: Label,
@@ -65,16 +65,16 @@ enum Finalizer {
 }
 
 #[derive(Debug)]
-struct BasicBlock {
-    label: Label,
-    params: Vec<String>,
-    operations: Vec<Operation>,
-    finalizer: Finalizer
+pub(crate) struct BasicBlock {
+    pub(crate) label: Label,
+    pub(crate) params: Vec<String>,
+    pub(crate) operations: Vec<Operation>,
+    pub(crate) finalizer: Finalizer
 }
 
 #[derive(Debug)]
-pub struct Program {
-    bbs: Vec<BasicBlock>
+pub(crate) struct Program {
+    pub(crate) bbs: Vec<BasicBlock>
 }
 
 fn read_lines(filename: &str) -> Vec<String> {
@@ -419,5 +419,3 @@ pub fn compile_program(prog: Program) -> String {
 
     prog_pre + &bf_bbs.join("") + &prog_post
 }
-
-

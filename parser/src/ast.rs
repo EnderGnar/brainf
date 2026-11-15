@@ -47,13 +47,13 @@ struct LexTree {
 
 
 #[derive(Debug)]
-struct Array {
-    name: String,
-    len: u32,
+pub(crate) struct Array {
+    pub(crate) name: String,
+    pub(crate) len: u32,
 }
 
 #[derive(Debug)]
-enum Expression {
+pub(crate) enum Expression {
     Val(i32),
     Var(String),
     Access(String, Box<Expression>),
@@ -62,7 +62,7 @@ enum Expression {
 }
 
 #[derive(Debug)]
-enum Stmt {
+pub(crate) enum Stmt {
     Assign {l: Expression, r: Expression},
     If {condition: Expression, body: Body},
     While {condition: Expression, body: Body},
@@ -72,20 +72,20 @@ enum Stmt {
 
 
 #[derive(Debug)]
-struct Body {
-    stmts: Vec<Stmt>,
+pub(crate) struct Body {
+    pub(crate) stmts: Vec<Stmt>,
 }
 #[derive(Debug)]
-struct Function {
-    name: String,
-    params: Vec<String>,
-    body: Body
+pub(crate) struct Function {
+   pub(crate) name: String,
+   pub(crate) params: Vec<String>,
+   pub(crate) body: Body
 }
 
 #[derive(Debug)]
-pub struct AST {
-    arrays: Vec<Array>,
-    funcs: Vec<Function>,
+pub(crate) struct AST {
+    pub(crate) arrays: Vec<Array>,
+    pub(crate) funcs: Vec<Function>,
 }
 
 // TODO Handle semicolon.
