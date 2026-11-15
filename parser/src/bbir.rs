@@ -21,7 +21,7 @@ impl TryFrom<&str> for Label {
 
 #[derive(Debug)]
 pub(crate) enum OpTy {
-    Getc, Putc, Set, Add, Sub, IsZero, Or
+    Getc, Putc, Set, Add, Sub, IsZero, Or, Load, Store
 }
 
 impl TryFrom<&str> for OpTy {
@@ -29,13 +29,15 @@ impl TryFrom<&str> for OpTy {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Ok(match value {
-            "getc" =>   Self::Getc,
-            "putc" =>   Self::Putc,
-            "set" =>    Self::Set,
-            "add" =>    Self::Add,
-            "sub" =>    Self::Sub,
+            "getc"   => Self::Getc,
+            "putc"   => Self::Putc,
+            "set"    => Self::Set,
+            "add"    => Self::Add,
+            "sub"    => Self::Sub,
             "iszero" => Self::IsZero,
-            "or" =>     Self::Or,
+            "or"     => Self::Or,
+            "load"   => Self::Load,
+            "store"  => Self::Store,
             _ => return Err(())
         })
     }
@@ -73,7 +75,14 @@ pub(crate) struct BasicBlock {
 }
 
 #[derive(Debug)]
+pub(crate) struct Array {
+    name: String,
+    len: usize,
+}
+
+#[derive(Debug)]
 pub(crate) struct Program {
+    pub(crate) arrs: Vec<Array>,
     pub(crate) bbs: Vec<BasicBlock>
 }
 
@@ -128,7 +137,8 @@ fn lex_finalizer(line: String) -> Finalizer {
     }
 }
 
-fn lex_bbir(lines: Vec<String>) -> Vec<BasicBlock> {
+fn lex_bbir(lines: Vec<String>) -> (Vec<BasicBlock>, Vec<Array>) {
+    let mut arrs = Vec::<Array>::new();
     let mut bbs = Vec::<BasicBlock>::new();
     let mut label: Option<Label> = None;
     let mut params = Vec::<String>::new();
@@ -154,18 +164,26 @@ fn lex_bbir(lines: Vec<String>) -> Vec<BasicBlock> {
                 params = Vec::new();
                 operations = Vec::new();
             },
+            'a' => {
+                assert!(label.is_none());
+                let parts: Vec<&str> = line.split_whitespace().filter(|s| s.len() > 0).collect();
+                assert!(parts.len() == 3);
+                arrs.push(
+                    Array { name: parts[1].to_string(), len: parts[2].parse().unwrap() }
+                )
+            }
             _   => continue
         }
     }
 
-    bbs
+    (bbs, arrs)
 }
 
 pub fn parse_bbir_file(filename: &str) -> Program {
     let lines = read_lines(filename);
 
-    let bbs = lex_bbir(lines);
-    Program { bbs }
+    let (bbs, arrs) = lex_bbir(lines);
+    Program { bbs, arrs }
 }
 
 fn is_var(s: &str) -> bool {
@@ -182,7 +200,7 @@ const INTRINSIC_VARS: &[&str] = &[
 ];
 
 // Only set is allowed to have intrinsics.
-fn compile_op(op: Operation, vars: &[String], current_position: &mut String) -> String {
+fn compile_op(op: Operation, vars: &[String], current_position: &mut String, stackframe_size: usize, arr_heads: &HashMap<String, usize>) -> String {
     let pos_holder = RefCell::new(current_position);
 
     let get_index = |s: &str| -> isize {
@@ -208,6 +226,20 @@ fn compile_op(op: Operation, vars: &[String], current_position: &mut String) -> 
     let copy_to = |d: &str, s: &str| -> String {
         move_to(d) + zero + &move_to(s) + "[-" + &move_to("$tmp_copy") + "+" + &move_to(d) + "+" + &move_to(s) + "]"
         + &move_val("$tmp_copy", s)
+    };
+
+
+    let stack_back  = "<".repeat(stackframe_size);
+    let stack_front = ">".repeat(stackframe_size);
+
+    let move_to_meta = || -> String { move_to("$root") + &stack_back + "[" + &stack_back + "]"};
+    let move_to_current = || -> String { move_to("$root") + &stack_front + "[" + &stack_front + "]"};
+
+    let current_to_arr = |arr: &str| -> String { move_to_meta() + &"<".repeat(arr_heads[arr])};
+    // Assume at arr root.
+    let arr_to_current = |arr: &str| -> String { ">".repeat(arr_heads[arr]) + &move_to_current() };
+    let copy_to_arr = |arr: &str, s: &str| -> String {
+        copy_to("$tmp_a", s) + &move_to("$tmp_a") + "[-" + &current_to_arr(arr) + "<+>" + &arr_to_current(arr) + &move_to("$tmp_a") + "]"
     };
 
     match op.op_type {
@@ -240,6 +272,25 @@ fn compile_op(op: Operation, vars: &[String], current_position: &mut String) -> 
             + &move_to(&op.args[0]) + zero + &move_to("$tmp_a")
             + "[" + &move_to(&op.args[0]) + "+" + &move_to("$tmp_a") + zero + "]"
         },
+        OpTy::Load => {
+            let arr = &op.args[0];
+            move_to(&op.args[2]) + zero
+            + &copy_to_arr(arr, &op.args[1]) + &current_to_arr(arr)
+            + "<[-<[<<]+[>>]<]"
+            + "<[<<]<" + "[->>>[>>]>+<<+<[<<]<]" + ">>>[>>]"
+            // Write loaded value back in.
+            + ">[-<<<[<<]<+>>>[>>]>]" + "<<<[<<]>>[->>]"
+            + "<[->" + &arr_to_current(arr) + &move_to(&op.args[2]) + "+" + &current_to_arr(arr) + "<]"
+            + ">" + &arr_to_current(arr)
+        },
+        OpTy::Store => {
+            let arr = &op.args[0];
+            copy_to_arr(arr, &op.args[1]) + &current_to_arr(arr)
+            + "<[-<[<<]+[>>]<]" + "<[<<]<" + zero + ">>>[>>]"
+            + &arr_to_current(arr) + &copy_to_arr(arr, &op.args[2])
+            + &current_to_arr(arr) + "<[-<[<<]<+>>>[>>]<]" + "<[<<]>>[->>]"
+            + &arr_to_current(arr)
+        }
     }
 }
 
@@ -326,10 +377,10 @@ fn compile_finalizer(fin: Finalizer, vars: &[String], current_position: &mut Str
 }
 
 // Compile bb assuming, current pointer is $root.
-fn compile_bb(bb: BasicBlock, variables: &HashMap<String, Vec<String>>, stackframe_size: usize, bb_indices: &HashMap<Label, usize>, arg_map: &HashMap<Label, Vec<isize>>) -> String {
+fn compile_bb(bb: BasicBlock, variables: &HashMap<String, Vec<String>>, stackframe_size: usize, bb_indices: &HashMap<Label, usize>, arg_map: &HashMap<Label, Vec<isize>>, arr_heads: &HashMap<String, usize>) -> String {
     let mut current_position = "$root".to_string();
     let bf_ops: Vec<_> = bb.operations.into_iter().map(|op| {
-        compile_op(op, &variables[&bb.label.family], &mut current_position)
+        compile_op(op, &variables[&bb.label.family], &mut current_position, stackframe_size, &arr_heads)
     }).collect();
 
     let bf_final = compile_finalizer(bb.finalizer, &variables[&bb.label.family], &mut current_position, stackframe_size, bb_indices, arg_map);
@@ -376,7 +427,9 @@ fn bb_wrapper(stackframe_size: usize, initial_bb: usize) -> (String, String, Str
     + &move_to("$tmp_b") + "[[-]" + &move_to("$root") + &move_to_current();
     let posterior = move_to_meta() + &move_to("$tmp_b") + "]" + &move_to("$root");
 
-    let prog_prior = move_to("ret") + &"+".repeat(initial_bb) + "[" + &move_val("ret", "$isp") + &move_to("$root");
+    let prog_prior = stack_front + "+" + &stack_back
+    + &move_to("ret") + &"+".repeat(initial_bb)
+    + "[" + &move_val("ret", "$isp") + &move_to("$root");
     let prog_post  = move_to("$isp") + zero + &move_to("ret") + "]";
 
     (prior, posterior, prog_prior, prog_post)
@@ -391,7 +444,11 @@ pub fn compile_program(prog: Program) -> String {
             bb.params.iter().for_each(|p| {vars.insert(p.to_string());});
 
             for o in &bb.operations {
-                o.args.iter().filter(|s| is_var(s)).for_each(|v| { vars.insert(v.to_string()); });
+                let args = match o.op_type {
+                    OpTy::Store | OpTy::Load => &o.args[1..],
+                    _ => &o.args
+                };
+                args.iter().filter(|s| is_var(s)).for_each(|v| { vars.insert(v.to_string()); });
             }
 
             // We ignore finalizers, because they will always need an input.
@@ -415,7 +472,14 @@ pub fn compile_program(prog: Program) -> String {
         (bb.label.clone(), bb.params.iter().map(get_index).collect())
     }).collect();
 
-    let bf_bbs: Vec<String> = prog.bbs.into_iter().map(|bb| bb_prior.to_string() + &compile_bb(bb, &variables, stackframe_size, &bb_indices, &arg_map) + &bb_post).collect();
+    let mut arr_heads = HashMap::new();
+    let mut offset = 2;
+    for arr in prog.arrs {
+        arr_heads.insert(arr.name, offset);
+        offset += 2 * arr.len + 3;
+    }
+
+    let bf_bbs: Vec<String> = prog.bbs.into_iter().map(|bb| bb_prior.to_string() + &compile_bb(bb, &variables, stackframe_size, &bb_indices, &arg_map, &arr_heads) + &bb_post).collect();
 
     prog_pre + &bf_bbs.join("") + &prog_post
 }

@@ -1,0 +1,38 @@
+a arr_a 10
+a arr_b 10
+
+l main:in
+o set zero 0
+o set one 1
+o set two 2
+o set three 3
+o set four 4
+o set five 5
+o store arr_a one one
+o store arr_a two two
+o store arr_a three three
+o store arr_a four four
+o store arr_a five five
+
+o store arr_b one five
+o store arr_b two four
+o store arr_b three three
+o store arr_b four two
+o store arr_b five one
+
+o getc idx1
+o load arr_a idx1 val
+o load arr_b idx1 val
+o load arr_a idx1 val
+o load arr_b idx1 val
+o load arr_a idx1 val
+o putc val
+
+o getc idx1
+o load arr_a idx1 val
+o load arr_b idx1 val
+o load arr_a idx1 val
+o load arr_a idx1 val
+o load arr_b idx1 val
+o putc val
+f return

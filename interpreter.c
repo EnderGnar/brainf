@@ -32,7 +32,7 @@ int find_start(char *program, int ip) {
     return -1;
 }
 
-void interpret(char *program, int decimal_mode) {
+void interpret(char *program, int decimal_mode, int debug_mode) {
     int ip = 0;
     int pos = 0;
 
@@ -100,22 +100,39 @@ void interpret(char *program, int decimal_mode) {
             ip = jump_list[ip];
             break;
         case '#':
-            // DEBUG
-            for(int i = 0; i < 40; i++)
-                printf("%3d,", band[i]);
-            printf("\n");
+            if (debug_mode) {
+                // DEBUG
+                printf("At location\n");
+                for(int i = 0; i < 20; i++)
+                    printf("%3d,", band[(pos + i) % BAND_LENGTH]);
+                
+                printf("\nAt zero\n");
+                for(int i = 0; i < 20; i++)
+                    printf("%3d,", band[i]);
+                printf("\n");
+            }
         default:
-            // DEBUG
-            printf("|%c@%d: band[%d]: %d\n", program[ip], ip, pos, band[pos]);
+            if (debug_mode) {
+                // DEBUG
+                printf("|%c@%d: band[%d]: %d\n", program[ip], ip, pos, band[pos]);
+            }
         }
 
         ip += 1;
     }
+
+    if (debug_mode) {
+        printf("\nBAND\n");
+        for(int i = 0; i < BAND_LENGTH; i++) {
+            printf("%3d,", band[i]);
+        }
+        printf("\n");
+    }
 }
 
 int main(int argc, char **argv) {
-    if(argc != 3) {
-        fprintf(stderr, "run with %s <program> <decimal_mode 0/1>", argv[0]);
+    if(argc < 3 || argc > 4) {
+        fprintf(stderr, "run with %s <program> <decimal_mode 0/1> [debug 0/1]", argv[0]);
         return 1;
     }
 
@@ -135,7 +152,9 @@ int main(int argc, char **argv) {
 
     int decimal_mode = atoi(argv[2]);
 
-    interpret(program, decimal_mode);
+    int debug_mode = argc >= 4 && atoi(argv[3]);
+
+    interpret(program, decimal_mode, debug_mode);
     printf("\n");
     return 0;
 }
