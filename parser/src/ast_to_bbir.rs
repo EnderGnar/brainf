@@ -117,6 +117,13 @@ fn compile_body(body: Body, bbs: &mut Vec<BasicBlock>, label_num: &mut usize, na
     for stmt in body.stmts {
         match stmt {
             crate::ast::Stmt::Assign { l, r:Expression::Call { function, args } } => {
+                if function == "getchar" {
+                    let Expression::Var(l) = l else { panic!("BAD USE OF GETCHAR") };
+                    builder.operations.push(
+                        Operation { op_type: OpTy::Getc, args: vec![l] }
+                    );
+                    continue;
+                }
                 let next_n = *label_num;
                 let next_label = Label::try_from(format!("{name}:nx{next_n}").as_str()).unwrap();
                 *label_num += 1;
@@ -209,6 +216,15 @@ fn compile_body(body: Body, bbs: &mut Vec<BasicBlock>, label_num: &mut usize, na
                 return None;
             },
             crate::ast::Stmt::Call { call:Expression::Call { function, args } } => {
+                if function == "putchar" {
+                    assert!(args.len() == 1);
+                    let Expression::Var(ref var) = args[0] else { panic!("BAD USE OF GETCHAR") };
+                    builder.operations.push(
+                        Operation { op_type: OpTy::Getc, args: vec![var.to_string()] }
+                    );
+                    continue;
+                }
+
                 let next_n = *label_num;
                 let next_label = Label::try_from(format!("{name}:nx{next_n}").as_str()).unwrap();
                 *label_num += 1;

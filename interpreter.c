@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define BAND_LENGTH (1024)
+#define BAND_LENGTH (1<<14)
 
 int find_end(char *program, int ip, int program_len) {
     int depth = 0;
@@ -39,9 +39,10 @@ void interpret(char *program, int decimal_mode, int debug_mode) {
     unsigned char *band = (unsigned char *) calloc(BAND_LENGTH, 1);
     
     int program_len = strlen(program);
-    int *jump_list = (int *) malloc(program_len);
+    int *jump_list = (int *) malloc(program_len * sizeof(int));
     for(int i = 0; i < strlen(program); i++) jump_list[i] = -1;
 
+    
     while (ip < program_len) {
         int in;
         switch (program[ip])
@@ -146,7 +147,7 @@ int main(int argc, char **argv) {
     }
 
     char *program = malloc(program_length);
-    fread(program, 1, program_length, prog_file);
+    fread(program, 1, program_length+1, prog_file);
 
     if (program[program_length-1] == '\n') program[program_length-1] = 0;
 

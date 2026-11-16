@@ -13,7 +13,9 @@ fn main() {
     }
     else {
         let ast = parse_c_file("../simple.c");
+        println!("{ast:?}");
         let prog = compile_ast(ast);
+        println!("{prog:?}");
         let bf   = compile_program(prog);
         println!("{bf}");
     }
