@@ -1,7 +1,7 @@
 use std::{assert_matches, fs::read_to_string};
 
 #[derive(Debug, Clone, Copy)]
-enum LexOp {
+pub(crate) enum LexOp {
     Assign,
     Eq,
     Neq,
@@ -288,7 +288,6 @@ fn parse_stmts(lt: &LexTree) -> Body {
     let mut i = 0;
 
     while i < nodes.len()  {
-        dbg!(i);
         match &nodes[i] {
             LexNode::While => {
                 let LexNode::Brace(BraceTy::Brace, con) = &nodes[i+1] else { panic!("No condition") };

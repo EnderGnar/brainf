@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::{HashMap, HashSet}, fs::read_to_string};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct Label {
+pub(crate) struct Label {
     family: String,
     name: String,
 }
@@ -19,7 +19,7 @@ impl TryFrom<&str> for Label {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum OpTy {
     Getc, Putc, Set, Add, Sub, IsZero, Or, Load, Store
 }
@@ -43,7 +43,7 @@ impl TryFrom<&str> for OpTy {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Operation {
     pub(crate) op_type: OpTy,
     pub(crate) args: Vec<String>
@@ -76,8 +76,8 @@ pub(crate) struct BasicBlock {
 
 #[derive(Debug)]
 pub(crate) struct Array {
-    name: String,
-    len: usize,
+    pub(crate) name: String,
+    pub(crate) len: usize,
 }
 
 #[derive(Debug)]
@@ -264,7 +264,7 @@ fn compile_op(op: Operation, vars: &[String], current_position: &mut String, sta
             + &move_to(&op.args[0]) + zero + &move_val("$tmp_a", &op.args[0])
         },
         OpTy::IsZero => {
-            move_to(&op.args[0]) + zero + "+" + &copy_to("$tmp_a", &op.args[1]) + &move_to("$tmp_a")
+            copy_to("$tmp_a", &op.args[1]) + &move_to(&op.args[0]) + zero + "+"  + &move_to("$tmp_a")
             + "[" + &move_to(&op.args[0]) + "-" + &move_to("$tmp_a") + zero + "]"
         },
         OpTy::Or => {
@@ -344,6 +344,7 @@ fn compile_finalizer(fin: Finalizer, vars: &[String], current_position: &mut Str
             + &move_to("ret") + &delta + &move_to_current() + &move_to("$tmp_a") + "]" + &move_to("$root")
         },
         Finalizer::Call { ret_label, call_label, args } => {
+            dbg!(&call_label);
             let call_idx = bb_indices[&call_label];
             let ret_idx  = bb_indices[&ret_label];
 
