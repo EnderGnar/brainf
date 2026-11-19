@@ -76,12 +76,12 @@ fn compile_exp_rec(exp: Expression, target_var: String, mut live_var: usize) -> 
                 },
                 LexOp::Add => {
                     ops.push(
-                        Operation { op_type: OpTy::Sub, args: vec![target_var, a_var, b_var] }
+                        Operation { op_type: OpTy::Add, args: vec![target_var, a_var, b_var] }
                     )
                 },
                 LexOp::Sub => {
                     ops.push(
-                        Operation { op_type: OpTy::Add, args: vec![target_var, a_var, b_var] }
+                        Operation { op_type: OpTy::Sub, args: vec![target_var, a_var, b_var] }
                     )
                 },
                 LexOp::Assign => panic!("ASSIGN IN OP"),
@@ -218,9 +218,9 @@ fn compile_body(body: Body, bbs: &mut Vec<BasicBlock>, label_num: &mut usize, na
             crate::ast::Stmt::Call { call:Expression::Call { function, args } } => {
                 if function == "putchar" {
                     assert!(args.len() == 1);
-                    let Expression::Var(ref var) = args[0] else { panic!("BAD USE OF GETCHAR") };
+                    let Expression::Var(ref var) = args[0] else { panic!("BAD USE OF PUTCHAR") };
                     builder.operations.push(
-                        Operation { op_type: OpTy::Getc, args: vec![var.to_string()] }
+                        Operation { op_type: OpTy::Putc, args: vec![var.to_string()] }
                     );
                     continue;
                 }

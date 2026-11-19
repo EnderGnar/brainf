@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define BAND_LENGTH (1<<14)
+#define BAND_LENGTH (1<<10)
 
 int find_end(char *program, int ip, int program_len) {
     int depth = 0;
@@ -65,6 +65,7 @@ void interpret(char *program, int decimal_mode, int debug_mode) {
             } else {
                 putc(band[pos], stdout);
             }
+            fflush(stdout);
             break;
         case ',':
             if (decimal_mode) {
